@@ -67,7 +67,7 @@ export default function Home() {
 
       {!gobyInstalled ?
         <p>please use a browser with Goby installed</p> :
-        (!address ? <button onClick={connectGoby} className="bg-gray-400 px-4 py-2 rounded-lg">Connect Goby</button> : <p className="pb-8">Goby Address: {address}</p>)
+        (!address ? <button onClick={connectGoby} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:opacity-80">Connect Goby</button> : <p className="pb-8">Goby Address: {address}</p>)
       }
 
       {address && <MainComponent address={address}/>}
@@ -77,19 +77,26 @@ export default function Home() {
 
 function MainComponent({ address }: { address: string }) {
   const [serverInfo, setServerInfo] = useState<any>(null);
-  const loading = serverInfo === null;
+  const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
+  const loading = serverInfo === null || dataStoreInfo === 'loading';
+
+  const fetchServerInfo = async () => {
+    const res = await fetch(`${API_BASE}/info`)
+
+    setServerInfo(await res.json());
+  };
 
   useEffect(() => {
-    const p = async () => {
-      const res = await fetch(`${API_BASE}/info`)
-
-      setServerInfo(await res.json());
-    }
-
     if(!serverInfo) {
-      p();
+      fetchServerInfo();
     }
   }, [serverInfo, setServerInfo]);
+
+  useEffect(() => {
+    if(dataStoreInfo === 'loading') {
+      setDataStoreInfo(null); // todo: fetch from launcher
+    }
+  }, [dataStoreInfo, setDataStoreInfo]);
 
   if(loading) {
     return (
@@ -97,16 +104,41 @@ function MainComponent({ address }: { address: string }) {
     );
   }
 
+  console.log({ dataStoreInfo })
+
   return (
     <div>
-      <div className="container mx-auto p-4">
+      <div className="container mx-auto p-4 mb-4">
         <div className="bg-white shadow-md rounded p-6">
-          <h2 className="text-2xl font-bold mb-4">Server Info</h2>
+          <div className="flex w-full justify-between">
+            <h2 className="text-2xl font-bold mb-4">Server Info</h2>
+            <button onClick={() => fetchServerInfo()}>Refresh</button>
+          </div>
           <pre className="bg-gray-100 p-4 rounded overflow-auto">
             <code className="text-sm text-gray-800">
               { JSON.stringify(serverInfo, null, 2) }
             </code>
           </pre>
+        </div>
+      </div>
+      <div className="container mx-auto p-4 mb-4">
+        <div className="bg-white shadow-md rounded p-6">
+          <div className="flex w-full justify-between">
+            <h2 className="text-2xl font-bold mb-4">DataStroe Info</h2>
+            {dataStoreInfo !== 'loading' && dataStoreInfo !== null && (<button onClick={() => alert('todo')}>Sync</button>)}
+          </div>
+          { dataStoreInfo ? (
+            <pre className="bg-gray-100 p-4 rounded overflow-auto">
+              <code className="text-sm text-gray-800">
+                { JSON.stringify(dataStoreInfo, null, 2) }
+              </code>
+            </pre>
+          ) : (
+            <div className="flex flex-col">
+              <p>No data store info found in local storage. Click the button below to launch a new data store.</p>
+              <button className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto' onClick={() => alert('todo')}>Launch Data Store</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
