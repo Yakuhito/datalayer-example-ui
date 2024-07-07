@@ -78,6 +78,7 @@ export default function Home() {
 function MainComponent({ address }: { address: string }) {
   const [serverInfo, setServerInfo] = useState<any>(null);
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
+  const [mintStatus, setMintStatus] = useState('press button to mint');
   const loading = serverInfo === null || dataStoreInfo === 'loading';
 
   const fetchServerInfo = async () => {
@@ -92,9 +93,21 @@ function MainComponent({ address }: { address: string }) {
     }
   }, [serverInfo, setServerInfo]);
 
+  const DATASTORE_INFO_KEY = 'datastore_info';
+
+  const setDataStoreInfoWithPersistence = (info: any) => {
+    setDataStoreInfo(info);
+    localStorage.setItem(DATASTORE_INFO_KEY, JSON.stringify(info));
+  };
+
   useEffect(() => {
     if(dataStoreInfo === 'loading') {
-      setDataStoreInfo(null); // todo: fetch from launcher
+      const info = localStorage.getItem(DATASTORE_INFO_KEY);
+      if(info) {
+        setDataStoreInfo(JSON.parse(info));
+      } else {
+        setDataStoreInfo(null);
+      }
     }
   }, [dataStoreInfo, setDataStoreInfo]);
 
@@ -103,6 +116,69 @@ function MainComponent({ address }: { address: string }) {
       <>Loading data...</>
     );
   }
+
+  const launchDataStore = async () => {
+    setMintStatus('building mint tx...');
+    const resp = await fetch(`${API_BASE}/mint`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        root_hash: '00'.repeat(32),
+        label: "Test DS",
+        description: "A freshly-minted datastore",
+        owner_address: address,
+        fee: 50000000,
+        oracle_fee: 1337
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    setMintStatus('broadcasting mint tx...');
+    const { new_info, coin_spends } = await resp.json();
+    await fetch(`${API_BASE}/sing_and_send`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        coin_spends
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    setMintStatus('waiting for mint tx to be confirmed...');
+
+    const coinId = new_info.launcher_id;
+    let coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        coin_id: coinId,
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    let parsedCoinResp = await coinResp.json();
+
+    while(!parsedCoinResp.confirmed) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          coin_id: coinId,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      parsedCoinResp = await coinResp.json();
+    }
+
+    setMintStatus('tx confirmed!');
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    setDataStoreInfoWithPersistence(new_info);
+  };
 
   console.log({ dataStoreInfo })
 
@@ -124,7 +200,7 @@ function MainComponent({ address }: { address: string }) {
       <div className="container mx-auto p-4 mb-4">
         <div className="bg-white shadow-md rounded p-6">
           <div className="flex w-full justify-between">
-            <h2 className="text-2xl font-bold mb-4">DataStroe Info</h2>
+            <h2 className="text-2xl font-bold mb-4">DataStore Info</h2>
             {dataStoreInfo !== 'loading' && dataStoreInfo !== null && (<button onClick={() => alert('todo')}>Sync</button>)}
           </div>
           { dataStoreInfo ? (
@@ -136,7 +212,7 @@ function MainComponent({ address }: { address: string }) {
           ) : (
             <div className="flex flex-col">
               <p>No data store info found in local storage. Click the button below to launch a new data store.</p>
-              <button className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto' onClick={() => alert('todo')}>Launch Data Store</button>
+              <button className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto' onClick={() => launchDataStore()}>Mint Data Store</button>
             </div>
           )}
         </div>
