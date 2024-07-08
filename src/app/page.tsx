@@ -80,6 +80,12 @@ function MainComponent({ address }: { address: string }) {
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
   const loading = serverInfo === null || dataStoreInfo === 'loading';
+  const [spendAsOption, setSpendAsOption] = useState<'owner' | 'admin' | 'writer' | 'oracle'>('owner');
+  const [spendAction, setSpendAction] = useState<'update_metadata' | 'update_ownership' | 'oracle' | 'burn'>('update_metadata');
+
+  const [newRootHash, setNewRootHash] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [newDescription, setNewDescription] = useState('');
 
   const fetchServerInfo = async () => {
     const res = await fetch(`${API_BASE}/info`)
@@ -98,13 +104,20 @@ function MainComponent({ address }: { address: string }) {
   const setDataStoreInfoWithPersistence = (info: any) => {
     setDataStoreInfo(info);
     localStorage.setItem(DATASTORE_INFO_KEY, JSON.stringify(info));
+
+    console.log({ info })
+    if(info?.metadata) {
+      setNewRootHash(info.metadata.root_hash);
+      setNewDescription(info.metadata.label);
+      setNewLabel(info.metadata.description);
+    }
   };
 
   useEffect(() => {
     if(dataStoreInfo === 'loading') {
       const info = localStorage.getItem(DATASTORE_INFO_KEY);
       if(info) {
-        setDataStoreInfo(JSON.parse(info));
+        setDataStoreInfoWithPersistence(JSON.parse(info));
       } else {
         setDataStoreInfo(null);
       }
@@ -238,6 +251,88 @@ function MainComponent({ address }: { address: string }) {
           )}
         </div>
       </div>
+      {dataStoreInfo !== 'loading' && dataStoreInfo && <div className="container mx-auto p-4 mb-4">
+        <div className="bg-white shadow-md rounded p-6">
+          <h2 className="text-2xl font-bold mb-4">Spend DataStore</h2>
+          <div className="flex flex-col">
+            <div>
+              <label htmlFor="role" className="mb-2">
+                Spend as
+              </label>
+              <select
+                id="role"
+                value={spendAsOption}
+                onChange={(t) => {
+                  const spendAs = t.target.value as "owner" | "admin" | "writer" | "oracle";
+                  if(spendAs === 'oracle') {
+                    setSpendAction('oracle');
+                  } else {
+                    setSpendAction('update_metadata');
+                  }
+                  setSpendAsOption(spendAs);
+                }}
+                className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
+              >
+                <option value="owner">Owner (via Goby)</option>
+                <option value="admin">Admin (server)</option>
+                <option value="writer">Writer (server)</option>
+                <option value="oracle">Oracle (server)</option>
+              </select>
+            </div>
+            <div className="py-4">
+              <label htmlFor="role" className="mb-2">
+                Action:
+              </label>
+              <select
+                id="role"
+                value={spendAction}
+                onChange={(t) => setSpendAction(t.target.value as "oracle" | "update_metadata" | "update_ownership")}
+                className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
+              >
+                {spendAsOption === 'oracle' && <option value="oracle">Oracle</option>}
+                {spendAsOption !== 'oracle' && <option value="update_metadata">Update metadata</option>}
+                {spendAsOption !== 'oracle' && spendAsOption !== 'writer' && <option value="update_ownership">Update ownership</option>}
+                {spendAsOption === 'owner' && <option value="brun">Burn</option>}
+              </select>
+            </div>
+            {spendAction === 'update_metadata' && <div className="pb-4">
+              <div>
+                <label htmlFor="newRootHash" className="block text-sm font-medium text-gray-700">
+                  New Root Hash
+                </label>
+                <input
+                  type="text"
+                  value={newRootHash}
+                  onChange={(t) => setNewRootHash(t.target.value)}
+                  className="mt-1 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200 w-full"
+                />
+              </div>
+              <div>
+                <label htmlFor="newLabel" className="block text-sm font-medium text-gray-700">
+                  New Label
+                </label>
+                <input
+                  type="text"
+                  value={newLabel}
+                  onChange={(t) => setNewLabel(t.target.value)}
+                  className="mt-1 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200 w-full"
+                />
+              </div>
+              <div>
+                <label htmlFor="newDescription" className="block text-sm font-medium text-gray-700">
+                  New Description
+                </label>
+                <input
+                  type="text"
+                  value={newDescription}
+                  onChange={(t) => setNewDescription(t.target.value)}
+                  className="mt-1 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200 w-full"
+                />
+              </div>
+            </div>}
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }
