@@ -148,11 +148,11 @@ function MainComponent({ address }: { address: string }) {
     
     setMintStatus('waiting for mint tx to be confirmed...');
 
-    const coinId = new_info.launcher_id;
+    const coin = coin_spends[coin_spends.length - 1].coin;
     let coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
       method: 'POST',
       body: JSON.stringify({ 
-        coin_id: coinId,
+        coin,
        }),
       headers: {
         'Content-Type': 'application/json'
@@ -165,7 +165,7 @@ function MainComponent({ address }: { address: string }) {
       coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
         method: 'POST',
         body: JSON.stringify({ 
-          coin_id: coinId,
+          coin,
          }),
         headers: {
           'Content-Type': 'application/json'
@@ -212,7 +212,12 @@ function MainComponent({ address }: { address: string }) {
           ) : (
             <div className="flex flex-col">
               <p>No data store info found in local storage. Click the button below to launch a new data store.</p>
-              <button className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto' onClick={() => launchDataStore()}>Mint Data Store</button>
+              <p className="pt-4 text-center">Mint status: {mintStatus}</p>
+              <button
+                className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto'
+                onClick={() => launchDataStore()}
+                disabled={mintStatus !== 'press button to mint'}  
+              >Mint Data Store</button>
             </div>
           )}
         </div>
