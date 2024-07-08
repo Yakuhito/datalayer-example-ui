@@ -178,7 +178,23 @@ function MainComponent({ address }: { address: string }) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
     setDataStoreInfoWithPersistence(new_info);
+    await fetchServerInfo();
   };
+
+  const syncDataStore = async () => {
+    const resp = await fetch(`${API_BASE}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        info: dataStoreInfo,
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const {info: new_info} = await resp.json();
+    setDataStoreInfoWithPersistence(new_info);
+  }
 
   console.log({ dataStoreInfo })
 
@@ -201,7 +217,7 @@ function MainComponent({ address }: { address: string }) {
         <div className="bg-white shadow-md rounded p-6">
           <div className="flex w-full justify-between">
             <h2 className="text-2xl font-bold mb-4">DataStore Info</h2>
-            {dataStoreInfo !== 'loading' && dataStoreInfo !== null && (<button onClick={() => alert('todo')}>Sync</button>)}
+            {dataStoreInfo !== 'loading' && dataStoreInfo !== null && (<button onClick={() => syncDataStore()}>Sync</button>)}
           </div>
           { dataStoreInfo ? (
             <pre className="bg-gray-100 p-4 rounded overflow-auto">
