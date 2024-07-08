@@ -11,6 +11,7 @@ interface Window {
 export default function Home() {
   const [gobyInstalled, setGobyInstalled] = useState<boolean | null>(null);
   const [address, setAddress] = useState<string>('');
+  const [pk, setPk] = useState<string>('');
 
   useEffect(() => {
     if(gobyInstalled === null) {
@@ -41,6 +42,10 @@ export default function Home() {
       )
       console.log({ address })
       setAddress(address);
+
+      (window as any).chia.request({ method: 'getPublicKeys', params: { limit: 1, offset: 0 } }).then((pk: string) => {
+        setPk(pk);
+      })
     });
   }, [gobyInstalled, setGobyInstalled, address, setAddress]);
 
@@ -55,6 +60,10 @@ export default function Home() {
     )
     console.log({ address })
     setAddress(address);
+
+    (window as any).chia.request({ method: 'getPublicKeys', params: { limit: 1, offset: 0 } }).then((pk: string) => {
+      setPk(pk);
+    })
   });
 
   if(gobyInstalled === null) {
@@ -67,15 +76,20 @@ export default function Home() {
 
       {!gobyInstalled ?
         <p>please use a browser with Goby installed</p> :
-        (!address ? <button onClick={connectGoby} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:opacity-80">Connect Goby</button> : <p className="pb-8">Goby Address: {address}</p>)
+        (!address || !pk ? <button onClick={connectGoby} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:opacity-80">Connect Goby</button> : <div>
+          <p className="pb-2">Goby address: {address}</p>
+          <p className="pb-8">Public synthetic key: {pk}</p>
+        </div>)
       }
 
-      {address && <MainComponent address={address}/>}
+      {address && pk && <MainComponent address={address} userPublicKey={pk}/>}
     </main>
   );
 }
 
-function MainComponent({ address }: { address: string }) {
+const TX_PRESS_BUTTON = 'press button below to start tx';
+
+function MainComponent({ address, userPublicKey }: { address: string, userPublicKey: string}) {
   const [serverInfo, setServerInfo] = useState<any>(null);
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
@@ -86,6 +100,10 @@ function MainComponent({ address }: { address: string }) {
   const [newRootHash, setNewRootHash] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
+
+  const [newDelegatedPuzzlesInfos, setNewDelegatedPuzzleInfos] = useState<any[]>([]);
+
+  const [txStatus, setTxStatus] = useState(TX_PRESS_BUTTON);
 
   const fetchServerInfo = async () => {
     const res = await fetch(`${API_BASE}/info`)
@@ -209,6 +227,71 @@ function MainComponent({ address }: { address: string }) {
     setDataStoreInfoWithPersistence(new_info);
   }
 
+  const buildAndSubmitTx = async () => {
+    setTxStatus('building tx...');
+
+    let resp;
+    if(spendAction === 'update_metadata') {
+      resp = await fetch(`${API_BASE}/update-metadata`, {
+        method: 'POST',
+        body: JSON.stringify({
+          info: dataStoreInfo,
+          new_root_hash: newRootHash,
+          new_label: newLabel,
+          new_description: newDescription,
+          owner_public_key: spendAsOption === 'owner' ? userPublicKey : undefined,
+          admin_public_key: spendAsOption === 'admin' ? serverInfo.pk : undefined,
+          writer_public_key: spendAsOption === 'writer' ? serverInfo.pk : undefined,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      resp = await resp.json();
+    } else if(spendAction === 'update_ownership') {
+      resp = await fetch(`${API_BASE}/update-ownership`, {
+        method: 'POST',
+        body: JSON.stringify({
+          info: dataStoreInfo,
+          new_owner_puzzle_hash: dataStoreInfo.owner_puzzle_hash,
+          new_delegated_puzzle_infos: newDelegatedPuzzlesInfos,
+          owner_public_key: spendAsOption === 'owner' ? userPublicKey : undefined,
+          admin_public_key: spendAsOption === 'admin' ? serverInfo.pk : undefined,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      resp = await resp.json();
+    } else if(spendAction === 'oracle') {
+      resp = await fetch(`${API_BASE}/oracle`, {
+        method: 'POST',
+        body: JSON.stringify({
+          info: dataStoreInfo,
+          fee: 50000000,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      resp = await resp.json();
+    } else {
+      resp = await fetch(`${API_BASE}/melt`, {
+        method: 'POST',
+        body: JSON.stringify({
+          info: dataStoreInfo,
+          owner_public_key: userPublicKey,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      resp = await resp.json();
+    }
+
+    // todo: resp, sign coin spends if necessary, add fee, server sign and broadcast, wait to finish
+  }
+
   console.log({ dataStoreInfo })
 
   return (
@@ -330,6 +413,12 @@ function MainComponent({ address }: { address: string }) {
                 />
               </div>
             </div>}
+            <p className="text-center">Status: {txStatus}</p>
+            <button
+              className="bg-green-500 text-white px-4 py-2 hover:opacity-80 rounded-lg mx-auto mt-4"
+              disabled={txStatus !== TX_PRESS_BUTTON}
+              onClick={() => buildAndSubmitTx()}
+            >Push Tx</button>
           </div>
         </div>
       </div>}
