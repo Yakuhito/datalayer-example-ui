@@ -94,7 +94,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
   const loading = serverInfo === null || dataStoreInfo === 'loading';
-  const [spendAsOption, setSpendAsOption] = useState<'owner' | 'admin' | 'writer' | 'oracle'>('admin');
+  const [spendAsOption, setSpendAsOption] = useState<'admin' | 'writer' | 'oracle' | 'owner'>('admin');
   const [spendAction, setSpendAction] = useState<'update_metadata' | 'update_ownership' | 'oracle' | 'burn'>('update_metadata');
 
   const [newRootHash, setNewRootHash] = useState('');
@@ -114,7 +114,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     setNewDelegatedPuzzleInfos([
       {type: 'admin', key: info?.pk},
       {type: 'writer', key: info?.pk},
-      {type: 'oracle', puzzle_hash: '11'.repeat(32), fee: 1337}, 
+      {type: 'oracle', puzzle_hash: '11'.repeat(32), fee: 1338}, 
     ]);
   };
 
@@ -144,7 +144,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
       if(info) {
         setDataStoreInfoWithPersistence(JSON.parse(info));
       } else {
-        setDataStoreInfo(null);
+        console.log({ dataStoreInfo })
+        alert('Data store melted')
       }
     }
   }, [dataStoreInfo, setDataStoreInfo]);
@@ -165,7 +166,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         description: "A freshly-minted datastore",
         owner_address: address,
         fee: 50000000,
-        oracle_fee: 1337
+        oracle_fee: 1338
        }),
       headers: {
         'Content-Type': 'application/json'
@@ -174,7 +175,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
 
     setMintStatus('broadcasting mint tx...');
     const { new_info, coin_spends } = await resp.json();
-    await fetch(`${API_BASE}/sing_and_send`, {
+    const sendResp = await fetch(`${API_BASE}/sing_and_send`, {
       method: 'POST',
       body: JSON.stringify({ 
         coin_spends
@@ -183,6 +184,12 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         'Content-Type': 'application/json'
       }
     });
+    const { err } = await sendResp.json();
+    if(err) {
+      alert('error when sending tx: ' + err)
+      setMintStatus('error sending mint tx');
+      return;
+    }
     
     setMintStatus('waiting for mint tx to be confirmed...');
 
@@ -238,6 +245,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     setTxStatus('building tx...');
 
     let resp;
+    let sig: any = undefined;
     if(spendAction === 'update_metadata') {
       resp = await fetch(`${API_BASE}/update-metadata`, {
         method: 'POST',
@@ -275,7 +283,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         method: 'POST',
         body: JSON.stringify({
           info: dataStoreInfo,
-          fee: 50000000,
+          fee: 100000000,
          }),
         headers: {
           'Content-Type': 'application/json'
@@ -294,10 +302,91 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         }
       });
       resp = await resp.json();
+
+      setTxStatus('waiting for Goby signature...');
+      console.log({ resp })
+      sig = await (window as any).chia.request({ method: 'signCoinSpends', params: { coinSpends: resp.coin_spends } });
+      console.log({ sig })
     }
 
-    console.log({ resp })
-    // todo: resp, sign coin spends if necessary, add fee, server sign and broadcast, wait to finish
+    let resp2: any = { coin_spends: [] };
+
+    if(spendAction !== 'oracle') {
+    setTxStatus('tx built, adding fee...');
+      resp2 = await fetch(`${API_BASE}/add-fee`, {
+        method: 'POST',
+        body: JSON.stringify({
+          fee: 50000000,
+          coins: resp.coin_spends.map((cs: any) => cs.coin)
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      resp2 = await resp2.json();
+    }
+
+    const coin_spends = [...resp.coin_spends, ...resp2.coin_spends];
+    console.log({ coin_spends })
+    
+    setTxStatus('broadcasting tx...');
+    const { new_info } = await resp;
+    const sendResp = await fetch(`${API_BASE}/sing_and_send`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        coin_spends,
+        signature: sig
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    const { err } = await sendResp.json();
+    if(err) {
+      alert('error when sending tx: ' + err)
+      setTxStatus('error sending tx');
+      return;
+    }
+    
+    setTxStatus('waiting for tx confirmation...');
+
+    const coin = coin_spends[coin_spends.length - 1].coin;
+    let coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        coin,
+       }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    let parsedCoinResp = await coinResp.json();
+
+    while(!parsedCoinResp.confirmed) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          coin,
+         }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      parsedCoinResp = await coinResp.json();
+    }
+
+    setTxStatus('tx confirmed!');
+    alert('tx confirmed!');
+
+    if(spendAction !== 'burn') {
+      setDataStoreInfoWithPersistence(new_info);
+    } else {
+      console.log({ dataStoreInfo });
+      setDataStoreInfoWithPersistence(null);
+    }
+    await fetchServerInfo();
+    setTxStatus(TX_PRESS_BUTTON);
   }
 
   console.log({ dataStoreInfo })
@@ -357,6 +446,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                   const spendAs = t.target.value as "owner" | "admin" | "writer" | "oracle";
                   if(spendAs === 'oracle') {
                     setSpendAction('oracle');
+                  } else if(spendAs === 'owner') {
+                    setSpendAction('burn');
                   } else {
                     setSpendAction('update_metadata');
                   }
@@ -364,10 +455,10 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                 }}
                 className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
               >
-                {/* <option value="owner">Owner (via Goby)</option> */}
                 <option value="admin">Admin (server)</option>
                 <option value="writer">Writer (server)</option>
                 <option value="oracle">Oracle (server)</option>
+                <option value="owner">Owner (via Goby + server)</option>
               </select>
             </div>
             <div className="py-4">
@@ -381,8 +472,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                 className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
               >
                 {spendAsOption === 'oracle' && <option value="oracle">Oracle</option>}
-                {spendAsOption !== 'oracle' && <option value="update_metadata">Update metadata</option>}
-                {spendAsOption !== 'oracle' && spendAsOption !== 'writer' && <option value="update_ownership">Update ownership</option>}
+                {spendAsOption !== 'owner' && spendAsOption !== 'oracle' && <option value="update_metadata">Update metadata</option>}
+                {spendAsOption !== 'owner' && spendAsOption !== 'oracle' && spendAsOption !== 'writer' && <option value="update_ownership">Update ownership</option>}
                 {spendAsOption === 'owner' && <option value="brun">Burn</option>}
               </select>
             </div>
