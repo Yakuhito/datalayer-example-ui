@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE, NETWORK_PREFIX } from "./config";
 import { bech32m } from "bech32";
 
@@ -40,11 +40,11 @@ export default function Home() {
       const address = bech32m.encode(NETWORK_PREFIX,
         bech32m.toWords(Buffer.from(puzzle_hash, 'hex'))
       )
-      console.log({ address })
+      // console.log({ address })
       setAddress(address);
 
       (window as any).chia.request({ method: 'getPublicKeys', params: { limit: 1, offset: 0 } }).then((pk: string) => {
-        setPk(pk);
+        setPk((pk[0] as string).replace('0x', ''));
       })
     });
   }, [gobyInstalled, setGobyInstalled, address, setAddress]);
@@ -62,7 +62,7 @@ export default function Home() {
     setAddress(address);
 
     (window as any).chia.request({ method: 'getPublicKeys', params: { limit: 1, offset: 0 } }).then((pk: string) => {
-      setPk(pk);
+      setPk((pk[0] as string).replace('0x', ''));
     })
   });
 
@@ -94,7 +94,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
   const loading = serverInfo === null || dataStoreInfo === 'loading';
-  const [spendAsOption, setSpendAsOption] = useState<'owner' | 'admin' | 'writer' | 'oracle'>('owner');
+  const [spendAsOption, setSpendAsOption] = useState<'owner' | 'admin' | 'writer' | 'oracle'>('admin');
   const [spendAction, setSpendAction] = useState<'update_metadata' | 'update_ownership' | 'oracle' | 'burn'>('update_metadata');
 
   const [newRootHash, setNewRootHash] = useState('');
@@ -108,7 +108,14 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
   const fetchServerInfo = async () => {
     const res = await fetch(`${API_BASE}/info`)
 
-    setServerInfo(await res.json());
+    const info = await res.json();
+
+    setServerInfo(info);
+    setNewDelegatedPuzzleInfos([
+      {type: 'admin', key: info?.pk},
+      {type: 'writer', key: info?.pk},
+      {type: 'oracle', puzzle_hash: '11'.repeat(32), fee: 1337}, 
+    ]);
   };
 
   useEffect(() => {
@@ -254,7 +261,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         body: JSON.stringify({
           info: dataStoreInfo,
           new_owner_puzzle_hash: dataStoreInfo.owner_puzzle_hash,
-          new_delegated_puzzle_infos: newDelegatedPuzzlesInfos,
+          new_delegated_puzzle_keys_and_types: newDelegatedPuzzlesInfos,
           owner_public_key: spendAsOption === 'owner' ? userPublicKey : undefined,
           admin_public_key: spendAsOption === 'admin' ? serverInfo.pk : undefined,
          }),
@@ -289,6 +296,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
       resp = await resp.json();
     }
 
+    console.log({ resp })
     // todo: resp, sign coin spends if necessary, add fee, server sign and broadcast, wait to finish
   }
 
@@ -356,7 +364,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                 }}
                 className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
               >
-                <option value="owner">Owner (via Goby)</option>
+                {/* <option value="owner">Owner (via Goby)</option> */}
                 <option value="admin">Admin (server)</option>
                 <option value="writer">Writer (server)</option>
                 <option value="oracle">Oracle (server)</option>
@@ -411,6 +419,21 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                   onChange={(t) => setNewDescription(t.target.value)}
                   className="mt-1 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200 w-full"
                 />
+              </div>
+            </div>}
+            {spendAction === 'update_ownership' && <div className="pb-4">
+                <div>
+                  {newDelegatedPuzzlesInfos.map(dpi => (
+                    <div key={dpi.type} className="flex">
+                      <span className="pr-4 break-words">{JSON.stringify(dpi, null, 2)}</span>
+                      <button
+                        className="text-red-500 hover:underline"
+                        onClick={() => {
+                          setNewDelegatedPuzzleInfos(newDelegatedPuzzlesInfos.filter(d => d !== dpi));
+                        }}
+                      >Remove</button>
+                    </div>
+                  ))}
               </div>
             </div>}
             <p className="text-center">Status: {txStatus}</p>
