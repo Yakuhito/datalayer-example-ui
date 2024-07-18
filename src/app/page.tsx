@@ -94,6 +94,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
   const loading = serverInfo === null || dataStoreInfo === 'loading';
+  console.log({ loading, serverInfo, dataStoreInfo })
   const [spendAsOption, setSpendAsOption] = useState<'admin' | 'writer' | 'oracle' | 'owner'>('admin');
   const [spendAction, setSpendAction] = useState<'update_metadata' | 'update_ownership' | 'oracle' | 'burn'>('update_metadata');
 
@@ -133,19 +134,18 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     console.log({ info })
     if(info?.metadata) {
       setNewRootHash(info.metadata.root_hash);
-      setNewDescription(info.metadata.label);
-      setNewLabel(info.metadata.description);
+      setNewDescription(info.metadata.description);
+      setNewLabel(info.metadata.label);
     }
   };
 
   useEffect(() => {
     if(dataStoreInfo === 'loading') {
       const info = localStorage.getItem(DATASTORE_INFO_KEY);
-      if(info) {
+      if(info && info !=='undefined') {
         setDataStoreInfoWithPersistence(JSON.parse(info));
       } else {
-        console.log({ dataStoreInfo })
-        alert('Data store melted')
+        setDataStoreInfo(null);
       }
     }
   }, [dataStoreInfo, setDataStoreInfo]);
@@ -162,7 +162,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
       method: 'POST',
       body: JSON.stringify({ 
         root_hash: '00'.repeat(32),
-        label: "Test DS",
+        label: "An ordinary store with extraordinary delegation capabilities",
         description: "A freshly-minted datastore",
         owner_address: address,
         fee: 50000000,
@@ -302,7 +302,9 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         }
       });
       resp = await resp.json();
+    }
 
+    if(spendAsOption === 'owner') {
       setTxStatus('waiting for Goby signature...');
       console.log({ resp })
       sig = await (window as any).chia.request({ method: 'signCoinSpends', params: { coinSpends: resp.coin_spends } });
@@ -383,6 +385,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
       setDataStoreInfoWithPersistence(new_info);
     } else {
       console.log({ dataStoreInfo });
+      alert('data store melted')
       setDataStoreInfoWithPersistence(null);
     }
     await fetchServerInfo();
@@ -423,7 +426,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
               <p>No data store info found in local storage. Click the button below to launch a new data store.</p>
               <p className="pt-4 text-center">Mint status: {mintStatus}</p>
               <button
-                className='mt-4 bg-green-500 rounded-lg px-4 py-2 text-white hover:opacity-80 mx-auto'
+                className={'mt-4 rounded-lg px-4 py-2 mx-auto ' + (mintStatus !== 'press button to mint' ? 'text-white bg-gray-300' : 'text-white hover:opacity-80 bg-green-500')}
                 onClick={() => launchDataStore()}
                 disabled={mintStatus !== 'press button to mint'}  
               >Mint Data Store</button>
@@ -446,8 +449,6 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                   const spendAs = t.target.value as "owner" | "admin" | "writer" | "oracle";
                   if(spendAs === 'oracle') {
                     setSpendAction('oracle');
-                  } else if(spendAs === 'owner') {
-                    setSpendAction('burn');
                   } else {
                     setSpendAction('update_metadata');
                   }
@@ -472,8 +473,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                 className="ml-2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-indigo-200"
               >
                 {spendAsOption === 'oracle' && <option value="oracle">Oracle</option>}
-                {spendAsOption !== 'owner' && spendAsOption !== 'oracle' && <option value="update_metadata">Update metadata</option>}
-                {spendAsOption !== 'owner' && spendAsOption !== 'oracle' && spendAsOption !== 'writer' && <option value="update_ownership">Update ownership</option>}
+                {spendAsOption !== 'oracle' && <option value="update_metadata">Update metadata</option>}
+                {spendAsOption !== 'oracle' && spendAsOption !== 'writer' && <option value="update_ownership">Update ownership</option>}
                 {spendAsOption === 'owner' && <option value="brun">Burn</option>}
               </select>
             </div>
@@ -529,7 +530,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
             </div>}
             <p className="text-center">Status: {txStatus}</p>
             <button
-              className="bg-green-500 text-white px-4 py-2 hover:opacity-80 rounded-lg mx-auto mt-4"
+              className={"px-4 py-2 rounded-lg mx-auto mt-4 " + (txStatus !== TX_PRESS_BUTTON ? 'text-white bg-gray-300' : 'text-white hover:opacity-80 bg-green-500')}
               disabled={txStatus !== TX_PRESS_BUTTON}
               onClick={() => buildAndSubmitTx()}
             >Push Tx</button>
