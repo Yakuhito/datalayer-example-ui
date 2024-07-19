@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { API_BASE, NETWORK_PREFIX } from "./config";
 import { bech32m } from "bech32";
 import { useSearchParams } from "next/navigation";
@@ -9,7 +9,11 @@ interface Window {
   ethereum: any;
 }
 
-export default function Home() {
+export default function SuspenseHome() {
+  return <Suspense><Home /></Suspense>;
+}
+
+function Home() {
   const params = useSearchParams();
   const [gobyInstalled, setGobyInstalled] = useState<boolean | null>(null);
   const [address, setAddress] = useState<string>('');
@@ -133,6 +137,7 @@ function MainComponent({ address, userPublicKey, secret }: { address: string, us
     if(!serverInfo) {
       fetchServerInfo();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverInfo, setServerInfo]);
 
   const DATASTORE_INFO_KEY = 'datastore_info';
