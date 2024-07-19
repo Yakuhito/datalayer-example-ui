@@ -88,7 +88,7 @@ export default function Home() {
         </div>)
       }
 
-      {address && pk && <MainComponent address={address} userPublicKey={pk} secret={params.get('secret')}/>}
+      {address && pk && <MainComponent address={address} userPublicKey={pk} secret={params.get('secret')!}/>}
     </main>
   );
 }
