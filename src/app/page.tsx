@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE, NETWORK_PREFIX } from "./config";
 import { bech32m } from "bech32";
+import { useSearchParams } from "next/navigation";
 
 interface Window {
   ethereum: any;
 }
 
 export default function Home() {
+  const params = useSearchParams();
   const [gobyInstalled, setGobyInstalled] = useState<boolean | null>(null);
   const [address, setAddress] = useState<string>('');
   const [pk, setPk] = useState<string>('');
@@ -70,6 +72,10 @@ export default function Home() {
     return <></>;
   }
 
+  if(!params.get('secret')) {
+    return <>No secret :|</>;
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8">
       <h1 className="text-xl font-medium mb-8">DataLayer Test App</h1>
@@ -82,14 +88,14 @@ export default function Home() {
         </div>)
       }
 
-      {address && pk && <MainComponent address={address} userPublicKey={pk}/>}
+      {address && pk && <MainComponent address={address} userPublicKey={pk} secret={params.get('secret')}/>}
     </main>
   );
 }
 
 const TX_PRESS_BUTTON = 'press button below to start tx';
 
-function MainComponent({ address, userPublicKey }: { address: string, userPublicKey: string}) {
+function MainComponent({ address, userPublicKey, secret }: { address: string, userPublicKey: string, secret: string}) {
   const [serverInfo, setServerInfo] = useState<any>(null);
   const [dataStoreInfo, setDataStoreInfo] = useState<'loading' | null | any>('loading');
   const [mintStatus, setMintStatus] = useState('press button to mint');
@@ -107,7 +113,11 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
   const [txStatus, setTxStatus] = useState(TX_PRESS_BUTTON);
 
   const fetchServerInfo = async () => {
-    const res = await fetch(`${API_BASE}/info`)
+    const res = await fetch(`${API_BASE}/info`, {
+      headers: {
+        'X-Secret': secret
+      }
+    })
 
     const info = await res.json();
 
@@ -165,23 +175,25 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         label: "An ordinary store with extraordinary delegation capabilities",
         description: "A freshly-minted datastore",
         owner_address: address,
-        fee: 50000000,
+        fee: 500000000,
         oracle_fee: 1338
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
 
     setMintStatus('broadcasting mint tx...');
     const { new_info, coin_spends } = await resp.json();
-    const sendResp = await fetch(`${API_BASE}/sing_and_send`, {
+    const sendResp = await fetch(`${API_BASE}/sing-and-send`, {
       method: 'POST',
       body: JSON.stringify({ 
         coin_spends
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
     const { err } = await sendResp.json();
@@ -194,26 +206,28 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     setMintStatus('waiting for mint tx to be confirmed...');
 
     const coin = coin_spends[coin_spends.length - 1].coin;
-    let coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+    let coinResp = await fetch(`${API_BASE}/coin-confirmed`, {
       method: 'POST',
       body: JSON.stringify({ 
         coin,
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
     let parsedCoinResp = await coinResp.json();
 
     while(!parsedCoinResp.confirmed) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+      coinResp = await fetch(`${API_BASE}/coin-confirmed`, {
         method: 'POST',
         body: JSON.stringify({ 
           coin,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       parsedCoinResp = await coinResp.json();
@@ -233,7 +247,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         info: dataStoreInfo,
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
 
@@ -259,7 +274,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
           writer_public_key: spendAsOption === 'writer' ? serverInfo.pk : undefined,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       resp = await resp.json();
@@ -274,7 +290,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
           admin_public_key: spendAsOption === 'admin' ? serverInfo.pk : undefined,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       resp = await resp.json();
@@ -283,10 +300,11 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
         method: 'POST',
         body: JSON.stringify({
           info: dataStoreInfo,
-          fee: 100000000,
+          fee: 500000000,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       resp = await resp.json();
@@ -298,7 +316,8 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
           owner_public_key: userPublicKey,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       resp = await resp.json();
@@ -318,11 +337,12 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
       resp2 = await fetch(`${API_BASE}/add-fee`, {
         method: 'POST',
         body: JSON.stringify({
-          fee: 50000000,
+          fee: 500000000,
           coins: resp.coin_spends.map((cs: any) => cs.coin)
         }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       resp2 = await resp2.json();
@@ -333,14 +353,15 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     
     setTxStatus('broadcasting tx...');
     const { new_info } = await resp;
-    const sendResp = await fetch(`${API_BASE}/sing_and_send`, {
+    const sendResp = await fetch(`${API_BASE}/sing-and-send`, {
       method: 'POST',
       body: JSON.stringify({ 
         coin_spends,
         signature: sig
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
     const { err } = await sendResp.json();
@@ -353,26 +374,28 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
     setTxStatus('waiting for tx confirmation...');
 
     const coin = coin_spends[coin_spends.length - 1].coin;
-    let coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+    let coinResp = await fetch(`${API_BASE}/coin-confirmed`, {
       method: 'POST',
       body: JSON.stringify({ 
         coin,
        }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Secret': secret
       }
     });
     let parsedCoinResp = await coinResp.json();
 
     while(!parsedCoinResp.confirmed) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      coinResp = await fetch(`${API_BASE}/coin_confirmed`, {
+      coinResp = await fetch(`${API_BASE}/coin-confirmed`, {
         method: 'POST',
         body: JSON.stringify({ 
           coin,
          }),
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Secret': secret
         }
       });
       parsedCoinResp = await coinResp.json();
@@ -459,7 +482,7 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
                 <option value="admin">Admin (server)</option>
                 <option value="writer">Writer (server)</option>
                 <option value="oracle">Oracle (server)</option>
-                <option value="owner">Owner (via Goby + server)</option>
+                <option value="owner">Owner (via Goby; server pays tx fees)</option>
               </select>
             </div>
             <div className="py-4">
@@ -515,9 +538,10 @@ function MainComponent({ address, userPublicKey }: { address: string, userPublic
             </div>}
             {spendAction === 'update_ownership' && <div className="pb-4">
                 <div>
+                  <div>New store will have the following layers:</div>
                   {newDelegatedPuzzlesInfos.map(dpi => (
-                    <div key={dpi.type} className="flex">
-                      <span className="pr-4 break-words">{JSON.stringify(dpi, null, 2)}</span>
+                    <div key={dpi.type} className="flex ml-4">
+                      <span className="pr-4 break-words">{dpi.type}</span>
                       <button
                         className="text-red-500 hover:underline"
                         onClick={() => {
